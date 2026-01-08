@@ -1,0 +1,7 @@
+{
+  "name": "Paper Composer",
+  "description": "Transform handwritten notes and exam papers into professionally formatted, print-ready A4 digital documents using AI-powered OCR and formatting by Anwar Ali Sehar.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
