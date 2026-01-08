@@ -120,7 +120,7 @@
     </style>
     
     <script>
-      // Netlify Environment Helper: Ensure process.env exists for browser-side SDK calls
+      // Netlify Environment Helper: Ensure process.env is defined before SDK loads
       window.process = window.process || { env: {} };
     </script>
 
