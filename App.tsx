@@ -19,7 +19,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
-  const [isKeySetupVisible, setIsKeySetupVisible] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiConnected, setApiConnected] = useState(false);
 
   useEffect(() => {
     const session = localStorage.getItem('paper_composer_session');
@@ -27,9 +28,7 @@ const App: React.FC = () => {
       setIsAdmin(true);
     }
     setAuthLoading(false);
-
-    // Initial check for API Key on load
-    checkApiKeyStatus();
+    checkKeyStatus();
 
     const hash = window.location.hash;
     if (hash && hash.length > 1) {
@@ -42,32 +41,26 @@ const App: React.FC = () => {
           setAppState(AppState.EDITOR);
         }
       } catch (e) {
-        console.error("Shared link parsing failed", e);
+        console.error("Link parsing failed", e);
       }
     }
   }, []);
 
-  const checkApiKeyStatus = async () => {
+  const checkKeyStatus = async () => {
     // @ts-ignore
-    const hasSelectedKey = await window.aistudio?.hasSelectedApiKey();
-    const isEnvKeyPresent = !!process.env.API_KEY && process.env.API_KEY !== 'undefined';
-    
-    // Show setup if no environment key AND no session key
-    if (!isEnvKeyPresent && !hasSelectedKey) {
-      setIsKeySetupVisible(true);
-    } else {
-      setIsKeySetupVisible(false);
-    }
+    const hasSelected = await window.aistudio?.hasSelectedApiKey();
+    const envKey = process.env.API_KEY;
+    setApiConnected(!!(envKey || hasSelected));
   };
 
   const handleOpenKeySelection = async () => {
     try {
       // @ts-ignore
       await window.aistudio.openSelectKey();
-      setIsKeySetupVisible(false);
-      setError(null);
+      setTimeout(checkKeyStatus, 1000);
+      setIsSettingsOpen(false);
     } catch (e) {
-      console.error("Key selection error:", e);
+      console.error("Key selection error", e);
     }
   };
 
@@ -93,14 +86,14 @@ const App: React.FC = () => {
   };
 
   const startProcessing = async (files: UploadedFile[]) => {
-    // Check key again right before processing
+    // Double check status
     // @ts-ignore
-    const hasSelectedKey = await window.aistudio?.hasSelectedApiKey();
+    const hasSelected = await window.aistudio?.hasSelectedApiKey();
     const envKey = process.env.API_KEY;
 
-    if (!envKey && !hasSelectedKey) {
-      setError("Setup Required: Please connect your API key to enable AI processing on Netlify.");
-      setIsKeySetupVisible(true);
+    if (!envKey && !hasSelected) {
+      setError("AI Engine Offline: Please configure your API key in Admin Settings.");
+      setIsSettingsOpen(true);
       return;
     }
 
@@ -114,12 +107,12 @@ const App: React.FC = () => {
       setExamData(result);
       setAppState(AppState.EDITOR);
     } catch (err: any) {
-      console.error("Processing error:", err);
+      console.error("Processing failed:", err);
       if (err.message === "API_KEY_NOT_FOUND") {
-        setError("API Session expired. Please link your key again.");
-        setIsKeySetupVisible(true);
+        setError("API Session expired. Re-link your key in Settings.");
+        setIsSettingsOpen(true);
       } else {
-        setError("AI Analysis failed. Check image quality and try again.");
+        setError("Transcription failed. Ensure text is clear and bright.");
       }
       setAppState(AppState.LANDING);
     }
@@ -140,7 +133,7 @@ const App: React.FC = () => {
         setTimeout(() => setShareSuccess(false), 3000);
       });
     } catch (e) {
-      alert("Sharing failed. Content might be too large.");
+      alert("Sharing failed. Content too large.");
     }
   };
 
@@ -162,7 +155,7 @@ const App: React.FC = () => {
       // @ts-ignore
       await html2pdf().set(opt).from(element).save();
     } catch (err) {
-      console.error("PDF Export failed", err);
+      console.error("PDF Export error:", err);
     } finally {
       setIsExportingPDF(false);
     }
@@ -171,7 +164,7 @@ const App: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -182,63 +175,15 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-white selection:bg-emerald-100">
-      <Header onReset={reset} onLogout={handleLogout} />
+      <Header 
+        onReset={reset} 
+        onLogout={handleLogout} 
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
       
       <main className="flex-1 flex flex-col overflow-hidden no-print theme-gradient">
         {appState === AppState.LANDING && (
-          <div className="max-w-6xl mx-auto w-full px-6 py-12 md:py-16 flex flex-col gap-12">
-            
-            {/* NETLIFY-READY SETUP BANNER */}
-            {isKeySetupVisible && (
-              <div className="bg-white border-2 border-emerald-500 rounded-[3rem] p-10 shadow-2xl shadow-emerald-500/10 border-dashed animate-in fade-in slide-in-from-top-4 duration-1000">
-                <div className="flex flex-col md:flex-row items-center gap-12">
-                  <div className="w-24 h-24 bg-emerald-50 rounded-[2.5rem] flex items-center justify-center flex-shrink-0 border border-emerald-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  
-                  <div className="flex-1 text-center md:text-left space-y-4">
-                    <div className="inline-block bg-emerald-100 text-emerald-700 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest mb-2">
-                      Netlify Deployment Optimizer
-                    </div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter">API Link Required</h2>
-                    <p className="text-slate-500 font-medium leading-relaxed max-w-xl">
-                      To activate the AI Engine on this Netlify domain, you must link a Gemini API key. Use the button below to connect securely.
-                    </p>
-                    <div className="flex flex-wrap gap-4 justify-center md:justify-start pt-2">
-                      <button 
-                        onClick={handleOpenKeySelection}
-                        className="px-10 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95 flex items-center gap-3"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                        </svg>
-                        Link API Key Now
-                      </button>
-                      <a 
-                        href="https://ai.google.dev/gemini-api/docs/billing" 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="px-10 py-4 border-2 border-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-emerald-600 hover:border-emerald-100 transition-all"
-                      >
-                        Check Billing
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="hidden lg:block w-px h-40 bg-slate-100"></div>
-                  
-                  <div className="hidden lg:flex flex-col gap-4 max-w-[200px]">
-                    <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Dashboard Tip</div>
-                    <p className="text-[11px] text-slate-400 font-bold leading-relaxed">
-                      For zero-setup access, add your key to <b>Environment Variables</b> in the Netlify Dashboard settings.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
+          <div className="max-w-6xl mx-auto w-full px-6 py-10 md:py-16 flex flex-col gap-10">
             <div className="text-center space-y-12">
               <div className="flex flex-col items-center gap-6">
                 <div className="flex p-1.5 bg-slate-100 rounded-[1.5rem] w-fit border border-slate-200 shadow-inner">
@@ -270,7 +215,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-6">
                   <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center text-red-600">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div>
@@ -279,10 +224,10 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <button 
-                  onClick={handleOpenKeySelection}
+                  onClick={() => setIsSettingsOpen(true)}
                   className="px-10 py-3.5 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95"
                 >
-                  Configure Key
+                  Configure API
                 </button>
               </div>
             )}
@@ -312,15 +257,15 @@ const App: React.FC = () => {
                     disabled={isExportingPDF}
                     className="flex flex-col items-center justify-center gap-1 py-5 bg-emerald-600 text-white rounded-[1.5rem] font-black shadow-2xl shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50"
                   >
-                    <span className="text-[10px] uppercase opacity-70 tracking-widest font-bold">HQ</span>
+                    <span className="text-[10px] uppercase opacity-70 tracking-widest font-bold">PROFESSIONAL</span>
                     <span className="text-xs tracking-widest">PDF EXPORT</span>
                   </button>
                   <button 
                     onClick={handleShare}
                     className={`flex flex-col items-center justify-center gap-1 py-5 ${shareSuccess ? 'bg-emerald-500' : 'bg-slate-800'} text-white rounded-[1.5rem] font-black transition-all active:scale-95 shadow-2xl`}
                   >
-                    <span className="text-[10px] uppercase opacity-70 tracking-widest font-bold">LINK</span>
-                    <span className="text-xs tracking-widest">{shareSuccess ? 'COPIED' : 'SHARE CLOUD'}</span>
+                    <span className="text-[10px] uppercase opacity-70 tracking-widest font-bold">SHARE</span>
+                    <span className="text-xs tracking-widest">{shareSuccess ? 'LINK COPIED' : 'CLOUD LINK'}</span>
                   </button>
                 </div>
                 <button 
@@ -330,7 +275,7 @@ const App: React.FC = () => {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 00-2 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
-                  INSTITUTIONAL PRINT
+                  PRINT EXAMINATION PAPER
                 </button>
               </div>
             </div>
@@ -341,6 +286,84 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* ADMIN SETTINGS MODAL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="max-w-xl w-full bg-white rounded-[3rem] p-10 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
+            <div className="flex justify-between items-start mb-10">
+              <div className="flex items-center gap-6">
+                <div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center text-emerald-500 shadow-xl">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black text-slate-950 tracking-tighter">System Settings</h2>
+                  <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Anwar Ali Sehar AI Dashboard</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-3 text-slate-300 hover:text-slate-950 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-8">
+              <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-black text-slate-950 uppercase text-xs tracking-widest">API Connection</h3>
+                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${apiConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`w-2 h-2 rounded-full ${apiConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                    {apiConnected ? 'Connected' : 'Disconnected'}
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 leading-relaxed font-medium mb-8">
+                  The AI Paper Composer requires a Gemini Pro API Key linked to a paid Google Cloud project for high-resolution vision tasks.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={handleOpenKeySelection}
+                    className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95"
+                  >
+                    Link Gemini API Key
+                  </button>
+                  <a 
+                    href="https://ai.google.dev/gemini-api/docs/billing" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="w-full py-5 border-2 border-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-emerald-600 hover:border-emerald-100 transition-all text-center"
+                  >
+                    View Billing Docs
+                  </a>
+                </div>
+              </div>
+
+              <div className="px-4">
+                <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Configuration Guidelines</div>
+                <ul className="space-y-3 text-[11px] text-slate-400 font-bold leading-relaxed">
+                  <li className="flex gap-3">
+                    <span className="text-emerald-500">•</span> 
+                    Ensure your Google Cloud project has the Gemini API enabled.
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-emerald-500">•</span> 
+                    Keys are linked to your session; re-link if the app remains idle.
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-emerald-500">•</span> 
+                    For automated deployments, set API_KEY in Netlify Env variables.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="pdf-export-wrapper" style={{ visibility: 'hidden', position: 'absolute', left: '-9999px' }}>
         {examData && (

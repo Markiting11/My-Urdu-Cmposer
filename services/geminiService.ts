@@ -58,31 +58,29 @@ const EXAM_SCHEMA = {
 };
 
 export const processHandwrittenImage = async (base64Images: string[], lang: AppLanguage): Promise<any> => {
-  // Use either the environment key or the session key provided by AI Studio
+  // Use either the environment key (Netlify) or the session key (AI Studio)
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
-    // If we're here and apiKey is missing, it should have been caught in App.tsx,
-    // but we'll throw a specific error just in case.
+  if (!apiKey || apiKey === 'undefined') {
     throw new Error("API_KEY_NOT_FOUND");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-  
-  const parts = base64Images.map(img => ({
-    inlineData: {
-      data: img.split(',')[1],
-      mimeType: 'image/jpeg'
-    }
-  }));
-
-  const promptText = lang === 'UR' 
-    ? "انور علی سہڑ کی خصوصی ہدایت: سوالات کی درست اردو کمپوزنگ کریں۔"
-    : "Per instructions from Anwar Ali Sehar: Strip trailing bracketed marks from the 'text' field and move them to 'marks' only.";
-
-  parts.push({ text: promptText } as any);
-
   try {
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const parts = base64Images.map(img => ({
+      inlineData: {
+        data: img.split(',')[1],
+        mimeType: 'image/jpeg'
+      }
+    }));
+
+    const promptText = lang === 'UR' 
+      ? "انور علی سہڑ کی خصوصی ہدایت: سوالات کی درست اردو کمپوزنگ کریں۔"
+      : "Per instructions from Anwar Ali Sehar: Strip trailing bracketed marks from the 'text' field and move them to 'marks' only.";
+
+    parts.push({ text: promptText } as any);
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-image-preview',
       contents: { parts: parts as any },
@@ -98,7 +96,13 @@ export const processHandwrittenImage = async (base64Images: string[], lang: AppL
     const data = JSON.parse(response.text);
     return { ...data, language: lang };
   } catch (error: any) {
-    if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key")) {
+    // Catch-all for API errors that indicate key issues
+    if (
+      error.message?.includes("API key") || 
+      error.message?.includes("403") || 
+      error.message?.includes("404") ||
+      error.message?.includes("Requested entity was not found")
+    ) {
       throw new Error("API_KEY_NOT_FOUND");
     }
     console.error("Gemini Error:", error);

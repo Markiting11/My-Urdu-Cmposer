@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -120,8 +121,11 @@
     </style>
     
     <script>
-      // Netlify Environment Helper: Ensure process.env is defined before SDK loads
+      // Netlify & Browser Environment Helper: Prevent "process is not defined"
       window.process = window.process || { env: {} };
+      if (typeof window.process.env === 'undefined') {
+        window.process.env = {};
+      }
     </script>
 
 <script type="importmap">
@@ -139,5 +143,6 @@
 </head>
 <body class="bg-white text-slate-900 min-h-screen">
     <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
