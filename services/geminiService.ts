@@ -58,16 +58,16 @@ const EXAM_SCHEMA = {
 };
 
 export const processHandwrittenImage = async (base64Images: string[], lang: AppLanguage): Promise<any> => {
-  // Use either the environment key (Netlify) or the session key (AI Studio)
+  // CRITICAL: Always create a new instance before making an API call to use the latest selected key
   const apiKey = process.env.API_KEY;
   
   if (!apiKey || apiKey === 'undefined') {
     throw new Error("API_KEY_NOT_FOUND");
   }
 
+  const ai = new GoogleGenAI({ apiKey });
+
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    
     const parts = base64Images.map(img => ({
       inlineData: {
         data: img.split(',')[1],
@@ -96,7 +96,9 @@ export const processHandwrittenImage = async (base64Images: string[], lang: AppL
     const data = JSON.parse(response.text);
     return { ...data, language: lang };
   } catch (error: any) {
-    // Catch-all for API errors that indicate key issues
+    console.error("Gemini processing error:", error);
+    
+    // Explicitly check for the "not found" error which often means key selection is stale
     if (
       error.message?.includes("API key") || 
       error.message?.includes("403") || 
@@ -105,7 +107,7 @@ export const processHandwrittenImage = async (base64Images: string[], lang: AppL
     ) {
       throw new Error("API_KEY_NOT_FOUND");
     }
-    console.error("Gemini Error:", error);
+    
     throw error;
   }
 };

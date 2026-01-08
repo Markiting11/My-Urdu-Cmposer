@@ -57,8 +57,12 @@ const App: React.FC = () => {
     try {
       // @ts-ignore
       await window.aistudio.openSelectKey();
-      setTimeout(checkKeyStatus, 1000);
+      // CRITICAL: Assume success after triggering and proceed
+      setApiConnected(true);
+      setError(null);
       setIsSettingsOpen(false);
+      // Still refresh status in background for UI accuracy
+      setTimeout(checkKeyStatus, 500);
     } catch (e) {
       console.error("Key selection error", e);
     }
@@ -86,17 +90,6 @@ const App: React.FC = () => {
   };
 
   const startProcessing = async (files: UploadedFile[]) => {
-    // Double check status
-    // @ts-ignore
-    const hasSelected = await window.aistudio?.hasSelectedApiKey();
-    const envKey = process.env.API_KEY;
-
-    if (!envKey && !hasSelected) {
-      setError("AI Engine Offline: Please configure your API key in Admin Settings.");
-      setIsSettingsOpen(true);
-      return;
-    }
-
     setUploadedFiles(files);
     setAppState(AppState.PROCESSING);
     setError(null);
@@ -108,11 +101,14 @@ const App: React.FC = () => {
       setAppState(AppState.EDITOR);
     } catch (err: any) {
       console.error("Processing failed:", err);
-      if (err.message === "API_KEY_NOT_FOUND") {
-        setError("API Session expired. Re-link your key in Settings.");
+      
+      // Handle the "entity not found" error by prompting for re-link
+      if (err.message === "API_KEY_NOT_FOUND" || err.message?.includes("Requested entity was not found")) {
+        setApiConnected(false);
+        setError("API Session expired. Please re-link your AI Studio Key in Settings.");
         setIsSettingsOpen(true);
       } else {
-        setError("Transcription failed. Ensure text is clear and bright.");
+        setError("Transcription failed. Please check handwriting clarity.");
       }
       setAppState(AppState.LANDING);
     }
@@ -213,13 +209,13 @@ const App: React.FC = () => {
             {error && (
               <div className="bg-red-50 border-2 border-red-100 text-red-700 px-10 py-8 rounded-[3rem] flex flex-col md:flex-row items-center justify-between gap-8 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center gap-6">
-                  <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center text-red-600">
+                  <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center text-red-600 animate-pulse">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div>
-                    <h4 className="font-black text-lg">System Alert</h4>
+                    <h4 className="font-black text-lg">Configuration Required</h4>
                     <p className="font-bold text-sm opacity-80">{error}</p>
                   </div>
                 </div>
@@ -227,7 +223,7 @@ const App: React.FC = () => {
                   onClick={() => setIsSettingsOpen(true)}
                   className="px-10 py-3.5 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95"
                 >
-                  Configure API
+                  Link API Now
                 </button>
               </div>
             )}
@@ -323,14 +319,17 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-sm text-slate-500 leading-relaxed font-medium mb-8">
-                  The AI Paper Composer requires a Gemini Pro API Key linked to a paid Google Cloud project for high-resolution vision tasks.
+                  Click the button below to link your <b>Gemini AI Studio Key</b>. A dialog will open where you can select or enter your secure key.
                 </p>
                 <div className="flex flex-col gap-3">
                   <button 
                     onClick={handleOpenKeySelection}
-                    className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95"
+                    className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95 flex items-center justify-center gap-3"
                   >
-                    Link Gemini API Key
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    Link AI Studio Key
                   </button>
                   <a 
                     href="https://ai.google.dev/gemini-api/docs/billing" 
@@ -348,15 +347,15 @@ const App: React.FC = () => {
                 <ul className="space-y-3 text-[11px] text-slate-400 font-bold leading-relaxed">
                   <li className="flex gap-3">
                     <span className="text-emerald-500">•</span> 
-                    Ensure your Google Cloud project has the Gemini API enabled.
+                    The "Link" button opens the official window to enter your <code className="text-slate-600 font-black">AIzaSy...</code> key.
                   </li>
                   <li className="flex gap-3">
                     <span className="text-emerald-500">•</span> 
-                    Keys are linked to your session; re-link if the app remains idle.
+                    Ensure your key is from a project with <b>billing enabled</b> to use the Pro Image models.
                   </li>
                   <li className="flex gap-3">
                     <span className="text-emerald-500">•</span> 
-                    For automated deployments, set API_KEY in Netlify Env variables.
+                    If transcription fails, check the "Connected" status above.
                   </li>
                 </ul>
               </div>
