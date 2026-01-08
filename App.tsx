@@ -29,7 +29,7 @@ const App: React.FC = () => {
     }
     setAuthLoading(false);
 
-    // Initial check for API Key
+    // Check for API Key presence on load
     checkApiKey();
 
     const hash = window.location.hash;
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const checkApiKey = async () => {
     // @ts-ignore
     const hasKey = await window.aistudio?.hasSelectedApiKey();
+    // If process.env.API_KEY is not defined by Netlify, show the selection banner
     if (!process.env.API_KEY && !hasKey) {
       setIsKeySetupVisible(true);
     } else {
@@ -59,10 +60,14 @@ const App: React.FC = () => {
   };
 
   const handleOpenKeySelection = async () => {
-    // @ts-ignore
-    await window.aistudio.openSelectKey();
-    setIsKeySetupVisible(false);
-    setError(null);
+    try {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+      setIsKeySetupVisible(false);
+      setError(null);
+    } catch (e) {
+      console.error("Key selection failed", e);
+    }
   };
 
   const handleLogin = (status: boolean) => {
@@ -87,10 +92,13 @@ const App: React.FC = () => {
   };
 
   const startProcessing = async (files: UploadedFile[]) => {
+    // Ensure we have a key before starting
     // @ts-ignore
     const hasKey = await window.aistudio?.hasSelectedApiKey();
-    if (!process.env.API_KEY && !hasKey) {
-      setError("API Key Required. Please complete the setup above.");
+    const envKey = process.env.API_KEY;
+
+    if (!envKey && !hasKey) {
+      setError("System Configuration Required: Please select an API key to proceed.");
       setIsKeySetupVisible(true);
       return;
     }
@@ -105,11 +113,12 @@ const App: React.FC = () => {
       setExamData(result);
       setAppState(AppState.EDITOR);
     } catch (err: any) {
-      if (err.message === "API_KEY_NOT_FOUND") {
-        setError("Your API key session expired or is invalid. Please select it again.");
+      console.error(err);
+      if (err.message === "API_KEY_NOT_FOUND" || err.message?.includes("API key")) {
+        setError("Your API key session is invalid or expired.");
         setIsKeySetupVisible(true);
       } else {
-        setError("Composition failed. Ensure handwriting is legible.");
+        setError("Composition failed. Please ensure handwriting is clear and try again.");
       }
       setAppState(AppState.LANDING);
     }
@@ -130,7 +139,7 @@ const App: React.FC = () => {
         setTimeout(() => setShareSuccess(false), 3000);
       });
     } catch (e) {
-      alert("Sharing failed. The document might be too large.");
+      alert("Sharing failed. Document content may be too large for a link.");
     }
   };
 
@@ -176,58 +185,67 @@ const App: React.FC = () => {
       
       <main className="flex-1 flex flex-col overflow-hidden no-print theme-gradient">
         {appState === AppState.LANDING && (
-          <div className="max-w-6xl mx-auto w-full px-6 py-12 md:py-20 flex flex-col gap-10">
+          <div className="max-w-6xl mx-auto w-full px-6 py-10 md:py-16 flex flex-col gap-10">
             
-            {/* API KEY SETUP BANNER */}
+            {/* ENHANCED API KEY SETUP DASHBOARD */}
             {isKeySetupVisible && (
-              <div className="bg-white border-2 border-emerald-500 rounded-[2rem] p-8 shadow-2xl shadow-emerald-500/10 animate-in fade-in slide-in-from-top-4 duration-500">
-                <div className="flex flex-col md:flex-row items-center gap-8">
-                  <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              <div className="bg-white border-2 border-emerald-500 rounded-[2.5rem] p-10 shadow-2xl shadow-emerald-500/10 border-dashed animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-10">
+                  <div className="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center flex-shrink-0 border border-emerald-100 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   </div>
-                  <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-xl font-black text-slate-900 mb-2">Netlify Setup: API Key Required</h2>
-                    <p className="text-sm text-slate-500 font-medium mb-4">
-                      To activate AI features on your deployed site, you can either select a key for this session or set it permanently in your Netlify dashboard.
-                    </p>
-                    <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+                  
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">Configuration Required</h2>
+                      <p className="text-slate-500 font-medium leading-relaxed max-w-xl mt-1">
+                        To enable AI processing on Netlify, you must provide a Gemini API Key. Use the button below to link your account for this session.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4">
                       <button 
                         onClick={handleOpenKeySelection}
-                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg"
+                        className="px-8 py-3.5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-95 flex items-center gap-2"
                       >
-                        Select Key for Session
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        Select API Key Now
                       </button>
                       <a 
                         href="https://ai.google.dev/gemini-api/docs/billing" 
                         target="_blank" 
                         rel="noreferrer"
-                        className="px-6 py-2.5 border-2 border-slate-100 text-slate-400 rounded-xl font-bold text-xs uppercase tracking-widest hover:text-emerald-600 transition-all"
+                        className="px-8 py-3.5 border-2 border-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-emerald-600 hover:border-emerald-100 transition-all flex items-center gap-2"
                       >
-                        Billing Docs
+                        Billing Info
                       </a>
                     </div>
                   </div>
-                  <div className="hidden lg:block w-px h-24 bg-slate-100"></div>
-                  <div className="hidden lg:flex flex-col gap-2 max-w-xs">
-                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Admin Tip: Permanent Fix</span>
+
+                  <div className="hidden lg:block w-px h-32 bg-slate-100"></div>
+                  
+                  <div className="hidden lg:flex flex-col gap-3 max-w-[240px]">
+                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">Permanent Deployment Fix</span>
                     <p className="text-[11px] text-slate-400 font-bold leading-relaxed">
-                      Go to Netlify Dashboard > Site Settings > Environment Variables. Add <b>API_KEY</b> as the key and your Gemini Key as the value.
+                      For a permanent solution, add <b>API_KEY</b> to your site's Environment Variables in the Netlify Dashboard.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="text-center space-y-8">
+            <div className="text-center space-y-10">
               <div className="flex flex-col items-center gap-6">
-                <div className="flex p-1 bg-slate-100 rounded-2xl w-fit border border-slate-200">
+                <div className="flex p-1 bg-slate-200/50 rounded-2xl w-fit border border-slate-200">
                   {['UR', 'AR', 'EN'].map((lang) => (
                     <button 
                       key={lang}
                       onClick={() => setAppLanguage(lang as AppLanguage)}
-                      className={`px-8 py-2.5 rounded-xl font-bold transition-all ${appLanguage === lang ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      className={`px-10 py-3 rounded-xl font-black transition-all ${appLanguage === lang ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       {lang === 'UR' ? 'اردو' : lang === 'AR' ? 'العربية' : 'English'}
                     </button>
@@ -247,12 +265,25 @@ const App: React.FC = () => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-                <span className="font-bold">{error}</span>
+              <div className="bg-red-50 border-2 border-red-100 text-red-700 px-8 py-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <span className="font-black text-sm">{error}</span>
+                </div>
+                <button 
+                  onClick={handleOpenKeySelection}
+                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95"
+                >
+                  Resolve Now
+                </button>
               </div>
             )}
 
-            <div className="bg-slate-50 border border-slate-200 rounded-[3rem] p-4 shadow-2xl shadow-emerald-500/5">
+            <div className="bg-slate-50 border border-slate-200 rounded-[3.5rem] p-5 shadow-2xl shadow-emerald-500/5">
               <FileUploader onFilesSelected={startProcessing} />
             </div>
           </div>
@@ -266,36 +297,41 @@ const App: React.FC = () => {
 
         {appState === AppState.EDITOR && examData && (
           <div className="flex-1 flex h-full overflow-hidden">
-            <div className="w-[420px] flex flex-col bg-white border-r border-slate-100 shadow-xl z-20">
+            <div className="w-[440px] flex flex-col bg-white border-r border-slate-100 shadow-2xl z-20">
               <div className="flex-1 overflow-auto preview-scroll-container">
                 <EditorSection data={examData} onChange={setExamData} />
               </div>
-              <div className="p-8 bg-slate-50 border-t border-slate-200 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
+              <div className="p-10 bg-slate-50 border-t border-slate-200 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
                   <button 
                     onClick={handleExportPDF}
                     disabled={isExportingPDF}
-                    className="flex flex-col items-center justify-center gap-1 py-3 bg-emerald-600 text-white rounded-xl font-black shadow-lg hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50"
+                    className="flex flex-col items-center justify-center gap-1 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50"
                   >
-                    <span className="text-[10px] uppercase">{isExportingPDF ? '...' : 'PDF EXPORT'}</span>
+                    <span className="text-[10px] opacity-70">PROFESSIONAL</span>
+                    <span className="text-[11px]">PDF EXPORT</span>
                   </button>
                   <button 
                     onClick={handleShare}
-                    className={`flex flex-col items-center justify-center gap-1 py-3 ${shareSuccess ? 'bg-emerald-500' : 'bg-slate-700'} text-white rounded-xl font-black transition-all active:scale-95`}
+                    className={`flex flex-col items-center justify-center gap-1 py-4 ${shareSuccess ? 'bg-emerald-500' : 'bg-slate-800'} text-white rounded-2xl font-black transition-all active:scale-95 shadow-xl`}
                   >
-                    <span className="text-[10px] uppercase">{shareSuccess ? 'LINK COPIED' : 'SHARE LINK'}</span>
+                    <span className="text-[10px] opacity-70">CLOUD</span>
+                    <span className="text-[11px]">{shareSuccess ? 'LINK COPIED' : 'SHARE LINK'}</span>
                   </button>
                 </div>
                 <button 
                   onClick={handlePrint}
-                  className="w-full py-4 border-2 border-slate-200 text-slate-900 rounded-2xl font-black hover:border-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full py-5 border-2 border-slate-200 text-slate-950 rounded-[1.5rem] font-black hover:border-emerald-500 hover:bg-white transition-all active:scale-95 flex items-center justify-center gap-3"
                 >
-                  PRINT PAPER
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 00-2 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  PRINT EXAMINATION PAPER
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-12 flex justify-center items-start bg-slate-100/50 no-print">
+            <div className="flex-1 overflow-auto p-16 flex justify-center items-start bg-slate-100/50 no-print">
               <A4Preview data={examData} />
             </div>
           </div>

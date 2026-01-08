@@ -58,8 +58,16 @@ const EXAM_SCHEMA = {
 };
 
 export const processHandwrittenImage = async (base64Images: string[], lang: AppLanguage): Promise<any> => {
-  // Create a new instance right before the call to pick up any newly selected API keys
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Use either the environment key or the session key provided by AI Studio
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    // If we're here and apiKey is missing, it should have been caught in App.tsx,
+    // but we'll throw a specific error just in case.
+    throw new Error("API_KEY_NOT_FOUND");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const parts = base64Images.map(img => ({
     inlineData: {
@@ -76,7 +84,7 @@ export const processHandwrittenImage = async (base64Images: string[], lang: AppL
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview', // Upgraded for better OCR and User-Selected Key support
+      model: 'gemini-3-pro-image-preview',
       contents: { parts: parts as any },
       config: {
         systemInstruction: getSystemPrompt(lang),
@@ -90,7 +98,7 @@ export const processHandwrittenImage = async (base64Images: string[], lang: AppL
     const data = JSON.parse(response.text);
     return { ...data, language: lang };
   } catch (error: any) {
-    if (error.message?.includes("Requested entity was not found")) {
+    if (error.message?.includes("Requested entity was not found") || error.message?.includes("API key")) {
       throw new Error("API_KEY_NOT_FOUND");
     }
     console.error("Gemini Error:", error);
